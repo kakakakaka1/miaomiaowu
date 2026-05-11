@@ -1489,3 +1489,414 @@ func (h *TrafficSummaryHandler) HandleSubscribeTraffic(w http.ResponseWriter, r 
 
 	respondJSON(w, http.StatusOK, resp)
 }
+
+// ServerTraffic holds per-server traffic data for notification display.
+type ServerTraffic struct {
+	Name    string
+	LimitGB float64
+	UsedGB  float64
+}
+
+// FetchTrafficSummaryForNotify returns overall totals, per-probe-server breakdown, and external subscription breakdown.
+func (h *TrafficSummaryHandler) FetchTrafficSummaryForNotify(ctx context.Context) (totalLimitGB, totalUsedGB float64, probeServers, extSubs []ServerTraffic, err error) {
+	var totalLimit, totalUsed int64
+
+	cfg, cfgErr := h.repo.GetProbeConfig(ctx)
+	if cfgErr == nil && len(cfg.Servers) > 0 {
+		limit, _, used, fetchErr := h.fetchTotals(ctx, "", nil)
+		if fetchErr == nil {
+			totalLimit += limit
+			totalUsed += used
+			perServer, perErr := h.fetchPerServerTraffic(ctx, cfg)
+			if perErr == nil {
+				probeServers = perServer
+			}
+		}
+	}
+
+	extSubs = h.fetchExternalSubsForNotify(ctx)
+	for _, s := range extSubs {
+		totalLimit += int64(s.LimitGB * bytesPerGigabyte)
+		totalUsed += int64(s.UsedGB * bytesPerGigabyte)
+	}
+
+	totalLimitGB = roundUpTwoDecimals(bytesToGigabytes(totalLimit))
+	totalUsedGB = roundUpTwoDecimals(bytesToGigabytes(totalUsed))
+	return
+}
+
+func (h *TrafficSummaryHandler) fetchExternalSubsForNotify(ctx context.Context) []ServerTraffic {
+	enabled, err := h.repo.IsSyncTrafficEnabled(ctx)
+	if err != nil || !enabled {
+		return nil
+	}
+	subs, err := h.repo.ListAllExternalSubscriptions(ctx)
+	if err != nil || len(subs) == 0 {
+		return nil
+	}
+	now := time.Now()
+	var result []ServerTraffic
+	for _, sub := range subs {
+		if sub.Expire != nil && sub.Expire.Before(now) {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(sub.TrafficMode)) == "none" {
+			continue
+		}
+		var used int64
+		switch strings.ToLower(strings.TrimSpace(sub.TrafficMode)) {
+		case "download":
+			used = sub.Download
+		case "upload":
+			used = sub.Upload
+		default:
+			used = sub.Upload + sub.Download
+		}
+		result = append(result, ServerTraffic{
+			Name:    sub.Name,
+			LimitGB: roundUpTwoDecimals(bytesToGigabytes(sub.Total)),
+			UsedGB:  roundUpTwoDecimals(bytesToGigabytes(used)),
+		})
+	}
+	return result
+}
+
+func (h *TrafficSummaryHandler) fetchPerServerTraffic(ctx context.Context, cfg storage.ProbeConfig) ([]ServerTraffic, error) {
+	switch cfg.ProbeType {
+	case storage.ProbeTypeNezha:
+		return h.fetchNezhaPerServer(ctx, cfg)
+	case storage.ProbeTypeNezhaV0:
+		return h.fetchNezhaV0PerServer(ctx, cfg)
+	case storage.ProbeTypeDstatus:
+		return h.fetchDstatusPerServer(ctx, cfg)
+	case storage.ProbeTypeKomari:
+		return h.fetchKomariPerServer(ctx, cfg)
+	default:
+		return nil, nil
+	}
+}
+
+func (h *TrafficSummaryHandler) fetchNezhaPerServer(ctx context.Context, cfg storage.ProbeConfig) ([]ServerTraffic, error) {
+	baseAddress := strings.TrimSpace(cfg.Address)
+	if baseAddress == "" {
+		return nil, nil
+	}
+
+	base, err := url.Parse(baseAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	switch strings.ToLower(base.Scheme) {
+	case "", "http":
+		base.Scheme = "ws"
+	case "https":
+		base.Scheme = "wss"
+	case "ws", "wss":
+	default:
+		base.Scheme = "wss"
+	}
+
+	endpoint := &url.URL{Path: "/api/v1/ws/server"}
+	target := base.ResolveReference(endpoint)
+
+	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, target.String(), nil)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return nil, err
+	}
+	defer conn.Close()
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return nil, err
+	}
+
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		return nil, err
+	}
+	message = bytes.TrimSpace(message)
+	if len(message) == 0 {
+		return nil, nil
+	}
+
+	type nezhaServer struct {
+		ID    json.Number `json:"id"`
+		State struct {
+			NetInTransfer  json.Number `json:"net_in_transfer"`
+			NetOutTransfer json.Number `json:"net_out_transfer"`
+		} `json:"state"`
+	}
+	type nezhaSnapshot struct {
+		Servers []nezhaServer `json:"servers"`
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(message))
+	decoder.UseNumber()
+
+	var snapshot nezhaSnapshot
+	if message[0] == '[' {
+		var frames []nezhaSnapshot
+		if err := decoder.Decode(&frames); err != nil {
+			return nil, err
+		}
+		if len(frames) == 0 {
+			return nil, nil
+		}
+		snapshot = frames[len(frames)-1]
+	} else {
+		if err := decoder.Decode(&snapshot); err != nil {
+			return nil, err
+		}
+	}
+
+	observed := make(map[string]struct{ NetIn, NetOut int64 })
+	for _, entry := range snapshot.Servers {
+		id := normalizeServerID(entry.ID)
+		if id == "" {
+			continue
+		}
+		observed[id] = struct{ NetIn, NetOut int64 }{
+			NetIn:  jsonNumberToInt64(entry.State.NetInTransfer),
+			NetOut: jsonNumberToInt64(entry.State.NetOutTransfer),
+		}
+	}
+
+	return buildPerServerResult(cfg.Servers, observed), nil
+}
+
+func (h *TrafficSummaryHandler) fetchNezhaV0PerServer(ctx context.Context, cfg storage.ProbeConfig) ([]ServerTraffic, error) {
+	baseAddress := strings.TrimSpace(cfg.Address)
+	if baseAddress == "" {
+		return nil, nil
+	}
+
+	base, err := url.Parse(baseAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	switch strings.ToLower(base.Scheme) {
+	case "", "http":
+		base.Scheme = "ws"
+	case "https":
+		base.Scheme = "wss"
+	case "ws", "wss":
+	default:
+		base.Scheme = "wss"
+	}
+
+	endpoint := &url.URL{Path: "/ws"}
+	target := base.ResolveReference(endpoint)
+
+	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, target.String(), nil)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return nil, err
+	}
+	defer conn.Close()
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return nil, err
+	}
+
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		return nil, err
+	}
+	message = bytes.TrimSpace(message)
+	if len(message) == 0 {
+		return nil, nil
+	}
+
+	type v0Server struct {
+		ID    json.Number `json:"id"`
+		State struct {
+			NetInTransfer  json.Number `json:"net_in_transfer"`
+			NetOutTransfer json.Number `json:"net_out_transfer"`
+		} `json:"state"`
+	}
+	type v0Data struct {
+		Servers map[string]*v0Server `json:"servers"`
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(message))
+	decoder.UseNumber()
+
+	var data v0Data
+	if err := decoder.Decode(&data); err != nil {
+		return nil, err
+	}
+
+	observed := make(map[string]struct{ NetIn, NetOut int64 })
+	for _, entry := range data.Servers {
+		if entry == nil {
+			continue
+		}
+		id := normalizeServerID(entry.ID)
+		if id == "" {
+			continue
+		}
+		observed[id] = struct{ NetIn, NetOut int64 }{
+			NetIn:  jsonNumberToInt64(entry.State.NetInTransfer),
+			NetOut: jsonNumberToInt64(entry.State.NetOutTransfer),
+		}
+	}
+
+	return buildPerServerResult(cfg.Servers, observed), nil
+}
+
+func (h *TrafficSummaryHandler) fetchDstatusPerServer(ctx context.Context, cfg storage.ProbeConfig) ([]ServerTraffic, error) {
+	serverIDs := make([]string, 0, len(cfg.Servers))
+	for _, srv := range cfg.Servers {
+		id := strings.TrimSpace(srv.ServerID)
+		if id != "" {
+			serverIDs = append(serverIDs, id)
+		}
+	}
+	if len(serverIDs) == 0 {
+		return nil, nil
+	}
+
+	reqURL := fmt.Sprintf("%s/api/traffic/batch?ids=%s", strings.TrimRight(cfg.Address, "/"), strings.Join(serverIDs, ","))
+	resp, err := h.client.Get(reqURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var batchResp batchTrafficResponse
+	if err := json.NewDecoder(resp.Body).Decode(&batchResp); err != nil {
+		return nil, err
+	}
+
+	observed := make(map[string]struct{ NetIn, NetOut int64 })
+	for id, data := range batchResp.Data {
+		used, _ := data.Monthly.Used.Int64()
+		observed[id] = struct{ NetIn, NetOut int64 }{NetIn: used, NetOut: 0}
+	}
+
+	// For dstatus, traffic method is effectively "down" (used = download)
+	var result []ServerTraffic
+	for _, srv := range cfg.Servers {
+		id := strings.TrimSpace(srv.ServerID)
+		if id == "" {
+			continue
+		}
+		entry, ok := observed[id]
+		if !ok {
+			continue
+		}
+		result = append(result, ServerTraffic{
+			Name:    srv.Name,
+			LimitGB: roundUpTwoDecimals(bytesToGigabytes(srv.MonthlyTrafficBytes)),
+			UsedGB:  roundUpTwoDecimals(bytesToGigabytes(entry.NetIn)),
+		})
+	}
+	return result, nil
+}
+
+func (h *TrafficSummaryHandler) fetchKomariPerServer(ctx context.Context, cfg storage.ProbeConfig) ([]ServerTraffic, error) {
+	baseAddress := strings.TrimSpace(cfg.Address)
+	if baseAddress == "" {
+		return nil, nil
+	}
+
+	reqURL := fmt.Sprintf("%s/api/v1/servers", strings.TrimRight(baseAddress, "/"))
+	resp, err := h.client.Get(reqURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	type komariStatus struct {
+		NetInTransfer  json.Number `json:"net_in_transfer"`
+		NetOutTransfer json.Number `json:"net_out_transfer"`
+	}
+	type komariServer struct {
+		ID     json.Number  `json:"id"`
+		Status komariStatus `json:"status"`
+	}
+
+	decoder := json.NewDecoder(resp.Body)
+	decoder.UseNumber()
+
+	var servers []komariServer
+	if err := decoder.Decode(&servers); err != nil {
+		return nil, err
+	}
+
+	observed := make(map[string]struct{ NetIn, NetOut int64 })
+	for _, entry := range servers {
+		id := normalizeServerID(entry.ID)
+		if id == "" {
+			continue
+		}
+		observed[id] = struct{ NetIn, NetOut int64 }{
+			NetIn:  jsonNumberToInt64(entry.Status.NetInTransfer),
+			NetOut: jsonNumberToInt64(entry.Status.NetOutTransfer),
+		}
+	}
+
+	return buildPerServerResult(cfg.Servers, observed), nil
+}
+
+func normalizeServerID(id json.Number) string {
+	if v, err := id.Int64(); err == nil {
+		return strconv.FormatInt(v, 10)
+	}
+	raw := strings.TrimSpace(id.String())
+	if raw != "" && strings.ContainsAny(raw, ".eE") {
+		if f, err := id.Float64(); err == nil {
+			return strconv.FormatInt(int64(math.Round(f)), 10)
+		}
+	}
+	return raw
+}
+
+func buildPerServerResult(servers []storage.ProbeServer, observed map[string]struct{ NetIn, NetOut int64 }) []ServerTraffic {
+	var result []ServerTraffic
+	for _, srv := range servers {
+		id := strings.TrimSpace(srv.ServerID)
+		if id == "" {
+			continue
+		}
+		entry, ok := observed[id]
+		if !ok {
+			continue
+		}
+
+		var used int64
+		switch strings.ToLower(strings.TrimSpace(srv.TrafficMethod)) {
+		case storage.TrafficMethodUp:
+			used = entry.NetOut
+		case storage.TrafficMethodDown:
+			used = entry.NetIn
+		default:
+			used = entry.NetIn + entry.NetOut
+		}
+		if used < 0 {
+			used = 0
+		}
+		if srv.MonthlyTrafficBytes > 0 && used > srv.MonthlyTrafficBytes {
+			used = srv.MonthlyTrafficBytes
+		}
+
+		result = append(result, ServerTraffic{
+			Name:    srv.Name,
+			LimitGB: roundUpTwoDecimals(bytesToGigabytes(srv.MonthlyTrafficBytes)),
+			UsedGB:  roundUpTwoDecimals(bytesToGigabytes(used)),
+		})
+	}
+	return result
+}

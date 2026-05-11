@@ -281,7 +281,7 @@ func main() {
 	go startTrafficCollector(collectorCtx, trafficHandler)
 
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
-	go handler.StartNotifyScheduler(notifyCtx, repo)
+	go handler.StartNotifyScheduler(notifyCtx, repo, trafficHandler)
 
 	go func() {
 		logger.Info("HTTP服务器启动", "version", version.Version, "address", addr)

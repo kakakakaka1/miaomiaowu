@@ -11,7 +11,7 @@ import (
 	"miaomiaowu/internal/storage"
 )
 
-func StartNotifyScheduler(ctx context.Context, repo *storage.TrafficRepository) {
+func StartNotifyScheduler(ctx context.Context, repo *storage.TrafficRepository, trafficHandler *TrafficSummaryHandler) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 	var lastDailyRun string
@@ -36,7 +36,7 @@ func StartNotifyScheduler(ctx context.Context, repo *storage.TrafficRepository) 
 				}
 				if nowTime == targetTime && lastDailyRun != today {
 					lastDailyRun = today
-					go sendDailyTrafficNotification(ctx, repo, n)
+					go sendDailyTrafficNotification(ctx, trafficHandler, n)
 				}
 			}
 
@@ -47,27 +47,47 @@ func StartNotifyScheduler(ctx context.Context, repo *storage.TrafficRepository) 
 	}
 }
 
-func sendDailyTrafficNotification(ctx context.Context, repo *storage.TrafficRepository, n *notify.Notifier) {
-	records, err := repo.ListRecent(ctx, 1)
+func sendDailyTrafficNotification(ctx context.Context, th *TrafficSummaryHandler, n *notify.Notifier) {
+	totalLimitGB, totalUsedGB, probeServers, extSubs, err := th.FetchTrafficSummaryForNotify(ctx)
 	if err != nil {
-		logger.Warn("[Notify] 获取流量记录失败", "error", err)
+		logger.Warn("[Notify] 获取流量数据失败", "error", err)
 		return
 	}
 
-	if len(records) == 0 {
+	if totalLimitGB == 0 && totalUsedGB == 0 && len(probeServers) == 0 && len(extSubs) == 0 {
 		return
 	}
 
-	rec := records[0]
-	usedGB := float64(rec.TotalUsed) / (1024 * 1024 * 1024)
-	limitGB := float64(rec.TotalLimit) / (1024 * 1024 * 1024)
-	remainGB := float64(rec.TotalRemaining) / (1024 * 1024 * 1024)
+	var b strings.Builder
 
-	msg := fmt.Sprintf("已用: %.2f GB / %.2f GB\n剩余: %.2f GB", usedGB, limitGB, remainGB)
+	pct := 0.0
+	if totalLimitGB > 0 {
+		pct = totalUsedGB / totalLimitGB * 100
+	}
+	remainGB := totalLimitGB - totalUsedGB
+	if remainGB < 0 {
+		remainGB = 0
+	}
+	fmt.Fprintf(&b, "总计: %.2f / %.2f GB (%.1f%%)\n剩余: %.2f GB", totalUsedGB, totalLimitGB, pct, remainGB)
+
+	if len(probeServers) > 0 {
+		b.WriteString("\n\n— 服务器 —")
+		for _, s := range probeServers {
+			fmt.Fprintf(&b, "\n• %s: %.2f / %.2f GB", s.Name, s.UsedGB, s.LimitGB)
+		}
+	}
+
+	if len(extSubs) > 0 {
+		b.WriteString("\n\n— 外部订阅 —")
+		for _, s := range extSubs {
+			fmt.Fprintf(&b, "\n• %s: %.2f / %.2f GB", s.Name, s.UsedGB, s.LimitGB)
+		}
+	}
+
 	_ = n.Send(ctx, notify.Event{
 		Type:    notify.EventDailyTraffic,
 		Title:   "每日流量统计",
-		Message: msg,
+		Message: b.String(),
 	})
 }
 
