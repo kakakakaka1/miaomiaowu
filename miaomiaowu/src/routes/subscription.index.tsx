@@ -99,12 +99,11 @@ const ICON_MAP: Record<string, any> = {
 const CLIENT_TYPES = [
   { type: 'clash', name: 'Clash', icon: clashIcon },
   { type: 'stash', name: 'Stash', icon: stashIcon },
-  { type: 'shadowrocket', name: 'Shadowrocket', icon: shadowrocketIcon },
+  { type: 'clash-to-shadowrocket', name: 'Shadowrocket', icon: shadowrocketIcon },
   { type: 'surfboard', name: 'Surfboard', icon: surfboardIcon },
   { type: 'surge', name: 'Surge', icon: surgeIcon },
   { type: 'surgemac', name: 'Surge Mac', icon: surgeMacIcon },
   { type: 'clash-to-surge', name: 'Clash→Surge', icon: surgeIcon },
-  { type: 'clash-to-shadowrocket', name: 'Clash→Shadowrocket', icon: shadowrocketIcon },
   { type: 'loon', name: 'Loon', icon: loonIcon },
   { type: 'qx', name: 'QuantumultX', icon: quanxIcon },
   { type: 'egern', name: 'Egern', icon: egernIcon },

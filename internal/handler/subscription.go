@@ -833,6 +833,29 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					}
 				}
 
+				// clash-to-shadowrocket: 将 rule-providers 中 format: mrs 改为 yaml，url .mrs 改为 .yaml
+				if clientType == "clash-to-shadowrocket" && ruleProvidersIdx >= 0 {
+					providersNode := rootMap.Content[ruleProvidersIdx+1]
+					if providersNode.Kind == yaml.MappingNode {
+						for j := 1; j < len(providersNode.Content); j += 2 {
+							providerValue := providersNode.Content[j]
+							if providerValue.Kind != yaml.MappingNode {
+								continue
+							}
+							for k := 0; k < len(providerValue.Content); k += 2 {
+								key := providerValue.Content[k].Value
+								val := providerValue.Content[k+1]
+								if key == "format" && val.Value == "mrs" {
+									val.Value = "yaml"
+								}
+								if key == "url" && strings.HasSuffix(val.Value, ".mrs") {
+									val.Value = strings.TrimSuffix(val.Value, ".mrs") + ".yaml"
+								}
+							}
+						}
+					}
+				}
+
 				// 如果找到 rule-providers 且不在最后，则移动到最后
 				if ruleProvidersIdx >= 0 && ruleProvidersIdx < len(rootMap.Content)-2 {
 					// 提取 rule-providers 的键和值
