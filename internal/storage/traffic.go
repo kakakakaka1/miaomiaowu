@@ -3491,6 +3491,29 @@ func (r *TrafficRepository) SetUserSubscriptions(ctx context.Context, username s
 	return nil
 }
 
+// UserHasAccessToSubscribeFile checks if a user has access to a subscribe file.
+// Admin users have access to all files. Regular users only have access to assigned files.
+func (r *TrafficRepository) UserHasAccessToSubscribeFile(ctx context.Context, username string, subscribeFileID int64) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("traffic repository not initialized")
+	}
+
+	// Check if user is admin
+	user, err := r.GetUser(ctx, username)
+	if err == nil && user.Role == "admin" {
+		return true, nil
+	}
+
+	var count int
+	err = r.db.QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM user_subscriptions WHERE username = ? AND subscription_id = ?`,
+		username, subscribeFileID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("check user subscription access: %w", err)
+	}
+	return count > 0, nil
+}
+
 // GetUserSubscriptions returns all subscriptions assigned to a user.
 func (r *TrafficRepository) GetUserSubscriptions(ctx context.Context, username string) ([]SubscribeFile, error) {
 	if r == nil || r.db == nil {

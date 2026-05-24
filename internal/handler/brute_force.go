@@ -28,9 +28,9 @@ type BruteForceProtector struct {
 
 func NewBruteForceProtector() *BruteForceProtector {
 	p := &BruteForceProtector{
-		maxFailures:   20,
-		window:        10 * time.Minute,
-		blockDuration: time.Hour,
+		maxFailures:   5,
+		window:        24 * time.Hour,
+		blockDuration: 24 * time.Hour,
 	}
 	globalBruteForceProtector = p
 	return p

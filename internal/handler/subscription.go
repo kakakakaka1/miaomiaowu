@@ -180,12 +180,8 @@ func (s *subscriptionEndpoint) authorizeRequest(w http.ResponseWriter, r *http.R
 		return r, true
 	}
 
-	// Check for username parameter (from composite short link - already authenticated by short link handler)
-	queryUsername := strings.TrimSpace(r.URL.Query().Get("username"))
-	if queryUsername != "" {
-		ctx := auth.ContextWithUsername(r.Context(), queryUsername)
-		return r.WithContext(ctx), true
-	}
+	// username parameter is only trusted when injected internally (e.g. short link handler sets context directly).
+	// Never trust username from external query string — skip it here.
 
 	// Check for token parameter (legacy/direct access)
 	queryToken := strings.TrimSpace(r.URL.Query().Get("token"))
@@ -288,6 +284,18 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	logger.Info("[⏱️ 耗时监测] 文件查找完成", "step", "file_lookup", "duration_ms", time.Since(stepStart).Milliseconds(), "filename", filename)
+
+	// 权限校验：验证用户是否有权访问该订阅文件
+	if username != "" && hasSubscribeFile && h.repo != nil {
+		hasAccess, err := h.repo.UserHasAccessToSubscribeFile(r.Context(), username, subscribeFile.ID)
+		if err != nil {
+			logger.Info("[Security] 权限校验失败", "username", username, "filename", filename, "error", err)
+		} else if !hasAccess {
+			logger.Info("[Security] 用户无权访问订阅文件", "username", username, "filename", filename, "subscribe_file_id", subscribeFile.ID)
+			writeError(w, http.StatusNotFound, errors.New("not found"))
+			return
+		}
+	}
 
 	cleanedName := filepath.Clean(filename)
 	if strings.HasPrefix(cleanedName, "..") || filepath.IsAbs(cleanedName) {
