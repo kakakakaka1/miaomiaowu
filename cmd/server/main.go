@@ -247,21 +247,22 @@ func main() {
 		path := strings.Trim(r.URL.Path, "/")
 		clientIP := handler.GetClientIP(r)
 
-		// 暴力探测封禁检查
-		if bruteForceProtector.IsBlocked(clientIP, r.URL.Path) {
+		isTempSub := strings.HasPrefix(path, "t/") && len(path) == 10
+
+		// 暴力探测封禁检查（临时订阅排除，不受封禁拦截）
+		if !isTempSub && bruteForceProtector.IsBlocked(clientIP, r.URL.Path) {
 			http.NotFound(w, r)
 			return
 		}
 
-		isSubscriptionFetch := (strings.HasPrefix(path, "t/") && len(path) == 10) ||
-			(len(path) >= 2 && isAlphanumeric(path))
+		isSubscriptionFetch := isTempSub || (len(path) >= 2 && isAlphanumeric(path))
 		if isSubscriptionFetch && !subRateLimiter.Allow(clientIP) {
 			http.Error(w, "请求过于频繁，请稍后再试", http.StatusTooManyRequests)
 			return
 		}
 
 		// Check if this is a temporary subscription access (starts with "t/" followed by 8 hex chars)
-		if strings.HasPrefix(path, "t/") && len(path) == 10 {
+		if isTempSub {
 			rec := &handler.StatusRecorder{ResponseWriter: w, StatusCode: 200}
 			tempSubAccessHandler.ServeHTTP(rec, r)
 			if rec.StatusCode == http.StatusNotFound || rec.StatusCode == http.StatusForbidden {
