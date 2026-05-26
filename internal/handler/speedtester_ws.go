@@ -23,6 +23,7 @@ type stWSMsg struct {
 	Bytes       int64   `json:"bytes,omitempty"`
 	URL         string  `json:"url,omitempty"`
 	Threads     int     `json:"threads,omitempty"`
+	LatencyOnly bool    `json:"latency_only,omitempty"` // true 仅测真连接延迟(Cloudflare 204)
 	DownMbps    float64 `json:"down_mbps,omitempty"`
 	LatencyMs   int64   `json:"latency_ms,omitempty"`
 	EgressIP    string  `json:"egress_ip,omitempty"`
@@ -120,7 +121,8 @@ func (h *SpeedTesterWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 // Dispatch 把测速任务派给指定在线测速端，阻塞等结果。
-func (h *SpeedTesterWSHandler) Dispatch(ctx context.Context, testerID int64, clashConfig string, bytes int64, url string, threads int) (speedtest.Result, error) {
+// latencyOnly=true 时只测真延迟(Cloudflare 204),跳过下载。
+func (h *SpeedTesterWSHandler) Dispatch(ctx context.Context, testerID int64, clashConfig string, bytes int64, url string, threads int, latencyOnly bool) (speedtest.Result, error) {
 	v, ok := h.conns.Load(testerID)
 	if !ok {
 		return speedtest.Result{}, errors.New("测速端不在线")
@@ -131,7 +133,10 @@ func (h *SpeedTesterWSHandler) Dispatch(ctx context.Context, testerID int64, cla
 	tc.pending.Store(jobID, ch)
 	defer tc.pending.Delete(jobID)
 
-	if err := tc.send(stWSMsg{Type: "run", JobID: jobID, ClashConfig: clashConfig, Bytes: bytes, URL: url, Threads: threads}); err != nil {
+	if err := tc.send(stWSMsg{
+		Type: "run", JobID: jobID, ClashConfig: clashConfig,
+		Bytes: bytes, URL: url, Threads: threads, LatencyOnly: latencyOnly,
+	}); err != nil {
 		return speedtest.Result{}, errors.New("下发任务失败: " + err.Error())
 	}
 

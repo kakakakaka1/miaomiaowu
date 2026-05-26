@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Gauge, Loader2, History, ArrowLeft, RefreshCw, Settings2, Plus, Trash2, Copy, ExternalLink } from 'lucide-react'
+import { Gauge, Loader2, History, ArrowLeft, RefreshCw, Settings2, Plus, Trash2, Copy, ExternalLink, Zap } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,7 +44,7 @@ function useLatestSpeedResults(enabled: boolean) {
     },
     enabled,
     refetchInterval: (q) =>
-      Object.values(q.state.data || {}).some((r: any) => r?.status === 'running') ? 4000 : false,
+      Object.values(q.state.data || {}).some((r: any) => r?.status === 'running') ? 1500 : false,
   })
 }
 
@@ -65,9 +65,51 @@ function SpeedCell({ r }: { r: any }) {
   )
 }
 
-function LatencyCell({ r }: { r: any }) {
-  if (!r || r.status !== 'ok') return <span className='text-muted-foreground text-xs'>—</span>
-  return <span className='font-mono whitespace-nowrap text-xs'>{r.latency_ms} ms</span>
+// 延迟单元格:可点击。无数据→Zap+"测延迟";测速中→spinner;已测→Zap+ms 可重测;失败→红 Zap+"失败"
+function LatencyCell({ r, onProbe, busy }: { r: any; onProbe: () => void; busy: boolean }) {
+  const running = r?.status === 'running' || busy
+  if (running) {
+    return (
+      <button className='inline-flex items-center gap-1 text-muted-foreground text-xs font-mono' disabled>
+        <Loader2 className='h-3 w-3 animate-spin' />
+      </button>
+    )
+  }
+  if (r?.status === 'failed') {
+    return (
+      <button
+        type='button'
+        onClick={onProbe}
+        title={'点击重测延迟' + (r?.error ? `: ${r.error}` : '')}
+        className='inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10'
+      >
+        <Zap className='h-3 w-3' />失败
+      </button>
+    )
+  }
+  if (r?.status === 'ok' && typeof r?.latency_ms === 'number' && r.latency_ms >= 0) {
+    return (
+      <button
+        type='button'
+        onClick={onProbe}
+        title='点击重测延迟'
+        className='inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs hover:bg-muted'
+      >
+        <Zap className='h-3 w-3 text-amber-500' />
+        {r.latency_ms} ms
+      </button>
+    )
+  }
+  return (
+    <button
+      type='button'
+      onClick={onProbe}
+      title='只测真连接延迟(Cloudflare 204 多采样)'
+      className='inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-600 hover:bg-amber-500/10'
+    >
+      <Zap className='h-3 w-3' />测延迟
+    </button>
+  )
 }
 
 function EgressIPCell({ r }: { r: any }) {
@@ -130,13 +172,16 @@ export function SpeedTestDialog({
     })
   }, [nodes])
 
-  const runTest = async (nodeIds: number[]) => {
+  const runTest = async (nodeIds: number[], latencyOnly = false) => {
     if (nodeIds.length === 0) return
     try {
       const body: any = { threads }
       if (source !== 'master') body.tester_id = source
+      if (latencyOnly) body.latency_only = true
       await Promise.all(nodeIds.map((id) => api.post('/api/admin/speedtest/run', { ...body, node_id: id })))
-      toast.success(nodeIds.length === 1 ? `已开始测速: ${rows.find((r) => r.id === nodeIds[0])?.name || ''}` : `已开始批量测速 (${nodeIds.length} 个节点)`)
+      if (!latencyOnly) {
+        toast.success(nodeIds.length === 1 ? `已开始测速: ${rows.find((r) => r.id === nodeIds[0])?.name || ''}` : `已开始批量测速 (${nodeIds.length} 个节点)`)
+      }
       queryClient.invalidateQueries({ queryKey: ['speedtest-latest'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.error || '发起测速失败')
@@ -244,7 +289,7 @@ export function SpeedTestDialog({
                             <td className='p-2'><div className='max-w-[280px] truncate' title={r.name}>{r.name}</div></td>
                             <td className='text-muted-foreground p-2 font-mono text-xs whitespace-nowrap'>{r.server}:{r.port}</td>
                             <td className='p-2'><SpeedCell r={res} /></td>
-                            <td className='p-2'><LatencyCell r={res} /></td>
+                            <td className='p-2'><LatencyCell r={res} onProbe={() => runTest([r.id], true)} busy={running} /></td>
                             <td className='p-2'><EgressIPCell r={res} /></td>
                             <td className='p-2'>
                               <div className='flex items-center justify-center gap-1'>
@@ -284,7 +329,7 @@ export function SpeedTestDialog({
                               <span className='text-muted-foreground text-[10px]'>速度</span>
                               <SpeedCell r={res} />
                               <span className='text-muted-foreground text-[10px]'>延迟</span>
-                              <LatencyCell r={res} />
+                              <LatencyCell r={res} onProbe={() => runTest([r.id], true)} busy={running} />
                               <span className='text-muted-foreground text-[10px]'>出口IP</span>
                               <EgressIPCell r={res} />
                             </div>

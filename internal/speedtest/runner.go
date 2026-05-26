@@ -24,8 +24,10 @@ const (
 	defaultTestURL      = "https://dl.google.com/dl/android/studio/install/3.4.1.0/android-studio-ide-183.5522156-windows.exe"
 	defaultTestDuration = 8 * time.Second
 	latencyProbeURL     = "https://www.gstatic.com/generate_204"
+	cfLatencyProbeURL   = "https://cp.cloudflare.com/generate_204" // 真连接延迟用 Cloudflare 204(全球边缘 + CDN 边)
 	egressIPProbeURL    = "https://api.ipify.org"
 	mixedPort           = 17900
+	cfLatencySamples    = 3 // 真延迟采样次数,取最快 2 个平均(去掉首包冷启动)
 )
 
 var runMu sync.Mutex
@@ -44,6 +46,7 @@ type Options struct {
 	TestBytes    int64
 	Timeout      time.Duration
 	Threads      int
+	LatencyOnly  bool // true 仅测真连接延迟(Cloudflare 204 多采样)不跑大文件下载
 }
 
 // RunNodeTest 用 mihomo 起单节点代理，测延迟 + 下行吞吐。
@@ -98,8 +101,15 @@ func RunNodeTest(ctx context.Context, mihomoBin, clashConfigJSON string, opts Op
 	}
 	defer func() { stop(); os.RemoveAll(workdir) }()
 
-	latency := measureLatency(ctx)
 	egressIP := measureEgressIP(ctx)
+
+	// LatencyOnly:只测真连接延迟(Cloudflare 204 多采样),不跑下载
+	if opts.LatencyOnly {
+		latency := measureLatencyCloudflare(ctx, cfLatencySamples)
+		return Result{LatencyMs: latency, EgressIP: egressIP}, nil
+	}
+
+	latency := measureLatency(ctx)
 
 	threads := opts.Threads
 	if threads <= 1 {
@@ -179,6 +189,56 @@ func measureLatency(ctx context.Context) int64 {
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	return time.Since(start).Milliseconds()
+}
+
+// measureLatencyCloudflare 用 Cloudflare 204(全球边缘 + CDN 边)多次采样,取最快 2 个均值;
+// 首包受 TLS 握手 / mihomo cold-start 影响,平均后更接近"真连接延迟"。全部失败返回 -1。
+func measureLatencyCloudflare(ctx context.Context, samples int) int64 {
+	if samples <= 0 {
+		samples = cfLatencySamples
+	}
+	client := proxyClient()
+	client.Timeout = 8 * time.Second
+	probes := make([]int64, 0, samples)
+	for i := 0; i < samples; i++ {
+		if ctx.Err() != nil {
+			break
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfLatencyProbeURL, nil)
+		if err != nil {
+			continue
+		}
+		start := time.Now()
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		probes = append(probes, time.Since(start).Milliseconds())
+	}
+	if len(probes) == 0 {
+		return -1
+	}
+	// 取最快 2 个均值(去掉首包冷启动的最慢);不足 2 个全取
+	sortInt64Asc(probes)
+	keep := 2
+	if len(probes) < keep {
+		keep = len(probes)
+	}
+	var sum int64
+	for i := 0; i < keep; i++ {
+		sum += probes[i]
+	}
+	return sum / int64(keep)
+}
+
+func sortInt64Asc(a []int64) {
+	for i := 1; i < len(a); i++ {
+		for j := i; j > 0 && a[j] < a[j-1]; j-- {
+			a[j], a[j-1] = a[j-1], a[j]
+		}
+	}
 }
 
 func measureEgressIP(ctx context.Context) string {
