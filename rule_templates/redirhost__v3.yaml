@@ -1,23 +1,22 @@
 mode: rule
 dns:
-  enable: true
-  enhanced-mode: redir-host
-  nameserver:
-    - https://dns.google/dns-query/dns-query#🚀 节点选择
+  default-nameserver:
+    - "https://8.8.8.8/dns-query#🚀 节点选择"
   direct-nameserver:
-    - https://doh.pub/dns-query
-  nameserver-policy:
-    geosite:cn,apple,private,steam,onedrive,category-games@cn:
-      - https://doh.pub/dns-query
-  proxy-server-nameserver:
-    - https://doh.pub/dns-query
+    - https://1.12.12.12/dns-query
+  enable: true
   ipv6: false
   listen: 0.0.0.0:7874
-  default-nameserver:
-    - https://cloudflare-dns.com/dns-query/dns-query#🚀 节点选择
+  nameserver:
+    - "https://8.8.8.8/dns-query#🚀 节点选择"
+  nameserver-policy:
+    geosite:cn,apple,private,steam,onedrive,category-games@cn:
+      - https://1.12.12.12/dns-query
+  proxy-server-nameserver:
+    - https://1.12.12.12/dns-query
 proxies: null
 proxy-groups:
-  - name: 🚀 手动选择
+  - name: "🚀 手动选择"
     type: select
     include-all: true
     include-all-proxies: true
@@ -26,7 +25,7 @@ proxy-groups:
       - ♻️ 自动选择
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-      - 🌄 落地节点
+      - "🌄 落地节点"
   - name: ♻️ 自动选择
     type: url-test
     include-all: true
@@ -38,7 +37,7 @@ proxy-groups:
     url: https://cp.cloudflare.com/generate_204
     interval: 300
     tolerance: 50
-  - name: 🌠 中转节点
+  - name: "🌠 中转节点"
     type: select
     include-all: true
     include-all-proxies: true
@@ -47,7 +46,7 @@ proxy-groups:
     proxies:
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🌄 落地节点
+  - name: "🌄 落地节点"
     type: select
     include-all: true
     include-all-proxies: true
@@ -56,48 +55,48 @@ proxy-groups:
     proxies:
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-    dialer-proxy-group: 🌠 中转节点
-  - name: 🚀 GitHub
+    dialer-proxy-group: "🌠 中转节点"
+  - name: "🚀 GitHub"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🚀 手动选择
+      - "🚀 手动选择"
       - ♻️ 自动选择
-      - 🎯 全球直连
+      - "🎯 全球直连"
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 📢 谷歌FCM
+  - name: "📢 谷歌FCM"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🚀 手动选择
+      - "🚀 手动选择"
       - ♻️ 自动选择
-      - 🎯 全球直连
+      - "🎯 全球直连"
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🇬 谷歌服务
+  - name: "🇬 谷歌服务"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🚀 手动选择
+      - "🚀 手动选择"
       - ♻️ 自动选择
-      - 🎯 全球直连
+      - "🎯 全球直连"
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🍎 苹果服务
+  - name: "🍎 苹果服务"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🎯 全球直连
-      - 🚀 手动选择
+      - "🎯 全球直连"
+      - "🚀 手动选择"
       - ♻️ 自动选择
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
@@ -107,94 +106,94 @@ proxy-groups:
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🎯 全球直连
-      - 🚀 手动选择
+      - "🎯 全球直连"
+      - "🚀 手动选择"
       - ♻️ 自动选择
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🎮 游戏平台
+  - name: "🎮 游戏平台"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🎯 全球直连
-      - 🚀 手动选择
+      - "🎯 全球直连"
+      - "🚀 手动选择"
       - ♻️ 自动选择
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🎮 Steam
+  - name: "🎮 Steam"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🎯 全球直连
-      - 🚀 手动选择
+      - "🎯 全球直连"
+      - "🚀 手动选择"
       - ♻️ 自动选择
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🚀 测速工具
+  - name: "🚀 测速工具"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🎯 全球直连
-      - 🚀 手动选择
+      - "🎯 全球直连"
+      - "🚀 手动选择"
       - ♻️ 自动选择
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🐟 漏网之鱼
+  - name: "🐟 漏网之鱼"
     type: select
     include-all: true
     include-all-proxies: true
     include-all-providers: true
     proxies:
-      - 🚀 手动选择
+      - "🚀 手动选择"
       - ♻️ 自动选择
-      - 🎯 全球直连
+      - "🎯 全球直连"
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
-  - name: 🔀 非标端口
+  - name: "🔀 非标端口"
     type: select
     proxies:
-      - 🐟 遵循规则
-      - 🎯 全球直连
-  - name: 🎯 全球直连
+      - "🐟 遵循规则"
+      - "🎯 全球直连"
+  - name: "🎯 全球直连"
     type: select
     proxies:
       - DIRECT
-  - name: 🐟 遵循规则
+  - name: "🐟 遵循规则"
     type: select
     proxies:
-      - 🐟 漏网之鱼
+      - "🐟 漏网之鱼"
 rules:
-  - GEOSITE,private,🎯 全球直连
-  - GEOIP,private,🎯 全球直连,no-resolve
-  - RULE-SET,Custom_Direct_Domain,🎯 全球直连
-  - RULE-SET,Custom_Direct_Classical_IP,🎯 全球直连
-  - RULE-SET,Custom_Proxy_Domain,🚀 手动选择
-  - RULE-SET,Custom_Proxy_Classical_IP,🚀 手动选择
-  - GEOSITE,google-cn,🎯 全球直连
-  - GEOSITE,category-games@cn,🎯 全球直连
-  - RULE-SET,Steam_CDN_Classical,🎯 全球直连
-  - GEOSITE,category-game-platforms-download,🎯 全球直连
-  - GEOSITE,category-public-tracker,🎯 全球直连
-  - GEOSITE,github,🚀 GitHub
-  - GEOSITE,category-speedtest,🚀 测速工具
-  - GEOSITE,apple,🍎 苹果服务
-  - GEOSITE,steam,🎮 Steam
+  - "GEOSITE,private,🎯 全球直连"
+  - "GEOIP,private,🎯 全球直连,no-resolve"
+  - "RULE-SET,Custom_Direct_Domain,🎯 全球直连"
+  - "RULE-SET,Custom_Direct_Classical_IP,🎯 全球直连"
+  - "RULE-SET,Custom_Proxy_Domain,🚀 手动选择"
+  - "RULE-SET,Custom_Proxy_Classical_IP,🚀 手动选择"
+  - "GEOSITE,google-cn,🎯 全球直连"
+  - "GEOSITE,category-games@cn,🎯 全球直连"
+  - "RULE-SET,Steam_CDN_Classical,🎯 全球直连"
+  - "GEOSITE,category-game-platforms-download,🎯 全球直连"
+  - "GEOSITE,category-public-tracker,🎯 全球直连"
+  - "GEOSITE,github,🚀 GitHub"
+  - "GEOSITE,category-speedtest,🚀 测速工具"
+  - "GEOSITE,apple,🍎 苹果服务"
+  - "GEOSITE,steam,🎮 Steam"
   - GEOSITE,microsoft,Ⓜ️ 微软服务
-  - GEOSITE,googlefcm,📢 谷歌FCM
-  - GEOSITE,google,🇬 谷歌服务
-  - GEOSITE,gfw,🚀 手动选择
-  - GEOSITE,category-games,🎮 游戏平台
-  - GEOIP,google,🇬 谷歌服务,no-resolve
-  - GEOSITE,cn,🎯 全球直连
-  - GEOIP,cn,🎯 全球直连,no-resolve
-  - RULE-SET,Custom_Port_Direct,🔀 非标端口
-  - MATCH,🐟 漏网之鱼
+  - "GEOSITE,googlefcm,📢 谷歌FCM"
+  - "GEOSITE,google,🇬 谷歌服务"
+  - "GEOSITE,gfw,🚀 手动选择"
+  - "GEOSITE,category-games,🎮 游戏平台"
+  - "GEOIP,google,🇬 谷歌服务,no-resolve"
+  - "GEOSITE,cn,🎯 全球直连"
+  - "GEOIP,cn,🎯 全球直连,no-resolve"
+  - "RULE-SET,Custom_Port_Direct,🔀 非标端口"
+  - "MATCH,🐟 漏网之鱼"
 rule-providers:
   Custom_Direct_Domain:
     type: http
