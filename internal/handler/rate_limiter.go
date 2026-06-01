@@ -30,6 +30,7 @@ type LoginRateLimiter struct {
 	maxAttempts     int
 	windowDuration  time.Duration
 	lockDuration    time.Duration
+	skipLocalIP     bool
 }
 
 func NewLoginRateLimiter() *LoginRateLimiter {
@@ -37,6 +38,7 @@ func NewLoginRateLimiter() *LoginRateLimiter {
 		maxAttempts:    5,
 		windowDuration: time.Hour,
 		lockDuration:   time.Hour,
+		skipLocalIP:    true,
 	}
 	globalLoginRateLimiter = l
 	return l
@@ -47,6 +49,7 @@ func NewLoginRateLimiterWithConfig(maxAttempts, windowMinutes, lockMinutes int) 
 		maxAttempts:    maxAttempts,
 		windowDuration: time.Duration(windowMinutes) * time.Minute,
 		lockDuration:   time.Duration(lockMinutes) * time.Minute,
+		skipLocalIP:    true,
 	}
 	globalLoginRateLimiter = l
 	return l
@@ -66,15 +69,30 @@ func (l *LoginRateLimiter) getConfig() (int, time.Duration, time.Duration) {
 	return l.maxAttempts, l.windowDuration, l.lockDuration
 }
 
+func (l *LoginRateLimiter) SetSkipLocalIP(skip bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.skipLocalIP = skip
+}
+
+func (l *LoginRateLimiter) shouldSkipIP(ip string) bool {
+	l.mu.RLock()
+	skip := l.skipLocalIP
+	l.mu.RUnlock()
+	return skip && IsLocalOrPrivateIP(ip)
+}
+
 func (l *LoginRateLimiter) Check(ip, username string) error {
 	now := time.Now()
 
-	if err := l.checkAttempts(&l.ipAttempts, ip, now); err != nil {
-		logger.Warn("🚫🚫🚫 [RATE_LIMIT] 登录被限制（IP）",
-			"ip", ip,
-			"username", username,
-		)
-		return err
+	if !l.shouldSkipIP(ip) {
+		if err := l.checkAttempts(&l.ipAttempts, ip, now); err != nil {
+			logger.Warn("🚫🚫🚫 [RATE_LIMIT] 登录被限制（IP）",
+				"ip", ip,
+				"username", username,
+			)
+			return err
+		}
 	}
 
 	if username != "" {
@@ -125,7 +143,9 @@ func (l *LoginRateLimiter) checkAttempts(store *sync.Map, key string, now time.T
 func (l *LoginRateLimiter) RecordFailure(ip, username string) {
 	now := time.Now()
 
-	l.recordAttempt(&l.ipAttempts, ip, now)
+	if !l.shouldSkipIP(ip) {
+		l.recordAttempt(&l.ipAttempts, ip, now)
+	}
 	if username != "" {
 		l.recordAttempt(&l.accountAttempts, username, now)
 	}

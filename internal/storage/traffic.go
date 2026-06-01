@@ -305,6 +305,7 @@ type SystemConfig struct {
 	SubRateLimitEnabled     bool `json:"sub_rate_limit_enabled"`
 	SubRateLimitMax         int  `json:"sub_rate_limit_max"`
 	SubRateLimitWindow      int  `json:"sub_rate_limit_window"`
+	SkipLocalIP             bool `json:"skip_local_ip"`
 }
 
 // ExternalSubscription represents an external subscription URL imported by user.
@@ -1045,6 +1046,7 @@ WHERE NOT EXISTS (SELECT 1 FROM system_config WHERE id = 1);
 		{"sub_rate_limit_enabled", "INTEGER NOT NULL DEFAULT 1"},
 		{"sub_rate_limit_max", "INTEGER NOT NULL DEFAULT 30"},
 		{"sub_rate_limit_window", "INTEGER NOT NULL DEFAULT 120"},
+		{"skip_local_ip", "INTEGER NOT NULL DEFAULT 1"},
 	} {
 		if err := r.ensureSystemConfigColumn(col[0], col[1]); err != nil {
 			return err
@@ -4750,7 +4752,8 @@ SELECT proxy_groups_source_url, client_compatibility_mode, silent_mode, silent_m
        COALESCE(notify_daily_traffic_time, '08:00'),
        COALESCE(login_rate_max_attempts, 5), COALESCE(login_rate_window, 60), COALESCE(login_rate_lock_duration, 60),
        COALESCE(brute_force_enabled, 1), COALESCE(brute_force_max_failures, 5), COALESCE(brute_force_window, 1440), COALESCE(brute_force_block_duration, 1440),
-       COALESCE(sub_rate_limit_enabled, 1), COALESCE(sub_rate_limit_max, 30), COALESCE(sub_rate_limit_window, 120)
+       COALESCE(sub_rate_limit_enabled, 1), COALESCE(sub_rate_limit_max, 30), COALESCE(sub_rate_limit_window, 120),
+       COALESCE(skip_local_ip, 1)
 FROM system_config
 WHERE id = 1
 `
@@ -4760,7 +4763,7 @@ WHERE id = 1
 	var enableShortLinkInt, enableSubTrafficHeaderInt, enableOverrideScriptsInt int
 	var notifyEnabledInt, notifySubFetchInt, notifyLoginInt, notifyIPBanInt int
 	var notifySilentModeInt, notifyDailyTrafficInt, notifyExpiryInt int
-	var bruteForceEnabledInt, subRateLimitEnabledInt int
+	var bruteForceEnabledInt, subRateLimitEnabledInt, skipLocalIPInt int
 	err := r.db.QueryRowContext(ctx, query).Scan(
 		&cfg.ProxyGroupsSourceURL, &compatibilityMode, &silentMode, &silentModeTimeout,
 		&enableSubInfoNodes, &cfg.SubInfoExpirePrefix, &cfg.SubInfoTrafficPrefix,
@@ -4773,6 +4776,7 @@ WHERE id = 1
 		&cfg.LoginRateMaxAttempts, &cfg.LoginRateWindow, &cfg.LoginRateLockDuration,
 		&bruteForceEnabledInt, &cfg.BruteForceMaxFailures, &cfg.BruteForceWindow, &cfg.BruteForceBlockDuration,
 		&subRateLimitEnabledInt, &cfg.SubRateLimitMax, &cfg.SubRateLimitWindow,
+		&skipLocalIPInt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -4794,6 +4798,7 @@ WHERE id = 1
 				SubRateLimitEnabled:      true,
 				SubRateLimitMax:          30,
 				SubRateLimitWindow:       120,
+				SkipLocalIP:             true,
 			}, nil
 		}
 		return SystemConfig{}, fmt.Errorf("query system config: %w", err)
@@ -4830,6 +4835,7 @@ WHERE id = 1
 	}
 	cfg.BruteForceEnabled = bruteForceEnabledInt != 0
 	cfg.SubRateLimitEnabled = subRateLimitEnabledInt != 0
+	cfg.SkipLocalIP = skipLocalIPInt != 0
 	if cfg.LoginRateMaxAttempts <= 0 {
 		cfg.LoginRateMaxAttempts = 5
 	}
@@ -4893,6 +4899,7 @@ SET proxy_groups_source_url = ?,
     sub_rate_limit_enabled = ?,
     sub_rate_limit_max = ?,
     sub_rate_limit_window = ?,
+    skip_local_ip = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = 1
 `
@@ -4938,6 +4945,7 @@ WHERE id = 1
 		cfg.LoginRateMaxAttempts, cfg.LoginRateWindow, cfg.LoginRateLockDuration,
 		boolToInt(cfg.BruteForceEnabled), cfg.BruteForceMaxFailures, cfg.BruteForceWindow, cfg.BruteForceBlockDuration,
 		boolToInt(cfg.SubRateLimitEnabled), cfg.SubRateLimitMax, cfg.SubRateLimitWindow,
+		boolToInt(cfg.SkipLocalIP),
 	)
 	if err != nil {
 		return fmt.Errorf("update system config: %w", err)

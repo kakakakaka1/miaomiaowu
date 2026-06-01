@@ -22,9 +22,10 @@ type subRateRecord struct {
 type SubscriptionRateLimiter struct {
 	mu      sync.Mutex
 	ips     map[string]*subRateRecord
-	enabled bool
-	limit   int
-	window  time.Duration
+	enabled     bool
+	limit       int
+	window      time.Duration
+	skipLocalIP bool
 }
 
 func NewSubscriptionRateLimiter(limit int, window time.Duration) *SubscriptionRateLimiter {
@@ -35,13 +36,20 @@ func NewSubscriptionRateLimiter(limit int, window time.Duration) *SubscriptionRa
 		window = time.Minute
 	}
 	l := &SubscriptionRateLimiter{
-		ips:     make(map[string]*subRateRecord),
-		enabled: true,
-		limit:   limit,
-		window:  window,
+		ips:         make(map[string]*subRateRecord),
+		enabled:     true,
+		limit:       limit,
+		window:      window,
+		skipLocalIP: true,
 	}
 	globalSubscriptionRateLimiter = l
 	return l
+}
+
+func (l *SubscriptionRateLimiter) SetSkipLocalIP(skip bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.skipLocalIP = skip
 }
 
 func (l *SubscriptionRateLimiter) UpdateConfig(enabled bool, limit, windowMinutes int) {
@@ -66,6 +74,9 @@ func (l *SubscriptionRateLimiter) Allow(ip string) bool {
 	defer l.mu.Unlock()
 
 	if !l.enabled {
+		return true
+	}
+	if l.skipLocalIP && IsLocalOrPrivateIP(ip) {
 		return true
 	}
 

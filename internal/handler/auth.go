@@ -34,9 +34,13 @@ type credentialsRequest struct {
 	Password string `json:"password"`
 }
 
-// GetClientIP extracts the client IP address from the request
+// GetClientIP extracts the client IP address from the request.
+// 优先级: CF-Connecting-IP > X-Forwarded-For[0] > X-Real-IP > RemoteAddr
 func GetClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header first (for proxied requests)
+	if cf := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cf != "" {
+		return cf
+	}
+
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		ips := strings.Split(xff, ",")
 		if len(ips) > 0 {

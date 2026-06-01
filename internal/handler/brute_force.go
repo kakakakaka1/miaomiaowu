@@ -26,6 +26,7 @@ type BruteForceProtector struct {
 	maxFailures   int
 	window        time.Duration
 	blockDuration time.Duration
+	skipLocalIP   bool
 }
 
 func NewBruteForceProtector() *BruteForceProtector {
@@ -34,6 +35,7 @@ func NewBruteForceProtector() *BruteForceProtector {
 		maxFailures:   5,
 		window:        24 * time.Hour,
 		blockDuration: 24 * time.Hour,
+		skipLocalIP:   true,
 	}
 	globalBruteForceProtector = p
 	return p
@@ -45,6 +47,7 @@ func NewBruteForceProtectorWithConfig(enabled bool, maxFailures, windowMinutes, 
 		maxFailures:   maxFailures,
 		window:        time.Duration(windowMinutes) * time.Minute,
 		blockDuration: time.Duration(blockMinutes) * time.Minute,
+		skipLocalIP:   true,
 	}
 	globalBruteForceProtector = p
 	return p
@@ -65,6 +68,19 @@ func (p *BruteForceProtector) getConfig() (bool, int, time.Duration, time.Durati
 	return p.enabled, p.maxFailures, p.window, p.blockDuration
 }
 
+func (p *BruteForceProtector) SetSkipLocalIP(skip bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.skipLocalIP = skip
+}
+
+func (p *BruteForceProtector) shouldSkip(ip string) bool {
+	p.mu.RLock()
+	skip := p.skipLocalIP
+	p.mu.RUnlock()
+	return skip && IsLocalOrPrivateIP(ip)
+}
+
 func GetBruteForceProtector() *BruteForceProtector {
 	return globalBruteForceProtector
 }
@@ -72,6 +88,9 @@ func GetBruteForceProtector() *BruteForceProtector {
 func (p *BruteForceProtector) IsBlocked(ip, path string) bool {
 	enabled, _, _, _ := p.getConfig()
 	if !enabled {
+		return false
+	}
+	if p.shouldSkip(ip) {
 		return false
 	}
 
@@ -104,6 +123,9 @@ func (p *BruteForceProtector) IsBlocked(ip, path string) bool {
 func (p *BruteForceProtector) RecordFailure(ip, path string) {
 	enabled, maxFailures, window, blockDuration := p.getConfig()
 	if !enabled {
+		return
+	}
+	if p.shouldSkip(ip) {
 		return
 	}
 

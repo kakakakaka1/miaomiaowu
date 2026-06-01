@@ -70,6 +70,7 @@ interface UserConfig {
   sub_rate_limit_enabled: boolean
   sub_rate_limit_max: number
   sub_rate_limit_window: number
+  skip_local_ip: boolean
 }
 
 export const Route = createFileRoute('/system-settings')({
@@ -119,6 +120,7 @@ function SystemSettingsPage() {
   const [subRateLimitEnabled, setSubRateLimitEnabled] = useState(true)
   const [subRateLimitMax, setSubRateLimitMax] = useState(30)
   const [subRateLimitWindow, setSubRateLimitWindow] = useState(120)
+  const [skipLocalIP, setSkipLocalIP] = useState(true)
 
   // Notification config state
   const [notifyConfig, setNotifyConfig] = useState<NotifyConfig>({
@@ -232,6 +234,7 @@ function SystemSettingsPage() {
       setSubRateLimitEnabled(userConfig.sub_rate_limit_enabled !== false)
       setSubRateLimitMax(userConfig.sub_rate_limit_max || 30)
       setSubRateLimitWindow(userConfig.sub_rate_limit_window || 120)
+      setSkipLocalIP(userConfig.skip_local_ip !== false)
     }
   }, [userConfig])
 
@@ -277,6 +280,7 @@ function SystemSettingsPage() {
       setSubRateLimitEnabled(variables.sub_rate_limit_enabled)
       setSubRateLimitMax(variables.sub_rate_limit_max)
       setSubRateLimitWindow(variables.sub_rate_limit_window)
+      setSkipLocalIP(variables.skip_local_ip)
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -320,6 +324,7 @@ function SystemSettingsPage() {
       sub_rate_limit_enabled: subRateLimitEnabled,
       sub_rate_limit_max: subRateLimitMax,
       sub_rate_limit_window: subRateLimitWindow,
+      skip_local_ip: skipLocalIP,
       ...updates,
     })
   }
@@ -1007,6 +1012,19 @@ function SystemSettingsPage() {
               <CardDescription>配置登录保护、暴力探测封禁和订阅频率限制</CardDescription>
             </CardHeader>
             <CardContent className='space-y-6'>
+              {/* 不封禁本地 IP */}
+              <div className='flex items-start justify-between gap-4'>
+                <div className='flex-1'>
+                  <h4 className='text-sm font-medium'>不封禁本地 IP</h4>
+                  <p className='text-xs text-muted-foreground mt-1'>
+                    反代/Docker 场景下，若上游未传 X-Forwarded-For，主控可能将所有用户视作同一本机 IP — 一次封禁会让所有人连不上。开启后，loopback / 内网 / 私有网段 IP 跳过封禁与频率限制（登录账户维度仍生效）。
+                  </p>
+                </div>
+                <Switch checked={skipLocalIP} onCheckedChange={(v) => { setSkipLocalIP(v); updateConfig({ skip_local_ip: v }) }} disabled={loadingConfig || updateConfigMutation.isPending} />
+              </div>
+
+              <hr className='border-border/50' />
+
               {/* 登录保护 */}
               <div className='space-y-3'>
                 <h4 className='text-sm font-medium'>登录保护</h4>
@@ -1094,6 +1112,7 @@ function SystemSettingsPage() {
                   sub_rate_limit_enabled: subRateLimitEnabled,
                   sub_rate_limit_max: subRateLimitMax,
                   sub_rate_limit_window: subRateLimitWindow,
+                  skip_local_ip: skipLocalIP,
                 })}
                 disabled={loadingConfig || updateConfigMutation.isPending}
               >

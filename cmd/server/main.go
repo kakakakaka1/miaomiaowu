@@ -145,6 +145,7 @@ func main() {
 	trafficHandler := handler.NewTrafficSummaryHandler(repo)
 	userRepo := auth.NewRepositoryAdapter(repo)
 	loginRateLimiter := handler.NewLoginRateLimiterWithConfig(sysCfg.LoginRateMaxAttempts, sysCfg.LoginRateWindow, sysCfg.LoginRateLockDuration)
+	loginRateLimiter.SetSkipLocalIP(sysCfg.SkipLocalIP)
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/setup/status", handler.NewSetupStatusHandler(repo))
@@ -255,7 +256,9 @@ func main() {
 	// All other paths go to the web handler
 	shortLinkHandler := handler.NewShortLinkHandler(repo, subscriptionHandler)
 	bruteForceProtector := handler.NewBruteForceProtectorWithConfig(sysCfg.BruteForceEnabled, sysCfg.BruteForceMaxFailures, sysCfg.BruteForceWindow, sysCfg.BruteForceBlockDuration)
+	bruteForceProtector.SetSkipLocalIP(sysCfg.SkipLocalIP)
 	subRateLimiter := handler.NewSubscriptionRateLimiter(sysCfg.SubRateLimitMax, time.Duration(sysCfg.SubRateLimitWindow)*time.Minute)
+	subRateLimiter.SetSkipLocalIP(sysCfg.SkipLocalIP)
 	go subRateLimiter.StartCleanup(context.Background())
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.Trim(r.URL.Path, "/")
