@@ -626,12 +626,59 @@ func (p *StashProducer) generateFullConfig(proxies []Proxy, opts *ProduceOptions
 		}
 	}
 
+	// 收集有效节点名 + 代理组名，用于清理 proxy-groups 中的无效引用
+	validNames := make(map[string]bool)
+	for _, proxy := range proxies {
+		if name := GetString(proxy, "name"); name != "" {
+			validNames[name] = true
+		}
+	}
+	// 代理组名本身也是合法引用目标
+	if proxyGroups != nil {
+		if groups, ok := proxyGroups.([]interface{}); ok {
+			for _, group := range groups {
+				if gm, ok := group.(map[string]interface{}); ok {
+					if name, _ := gm["name"].(string); name != "" {
+						validNames[name] = true
+					}
+				}
+			}
+		}
+	}
+	// 内置策略名
+	for _, builtin := range []string{"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"} {
+		validNames[builtin] = true
+	}
+
 	// Write proxy-groups
 	sb.WriteString("proxy-groups:\n")
 	if proxyGroups != nil {
 		if groups, ok := proxyGroups.([]interface{}); ok {
 			for _, group := range groups {
-				groupBytes, err := json.Marshal(group)
+				gm, ok := group.(map[string]interface{})
+				if !ok {
+					groupBytes, _ := json.Marshal(group)
+					sb.WriteString("  - ")
+					sb.Write(groupBytes)
+					sb.WriteString("\n")
+					continue
+				}
+				// 清理 proxies 列表中的无效引用
+				if groupProxies, ok := gm["proxies"].([]interface{}); ok {
+					cleaned := make([]interface{}, 0, len(groupProxies))
+					groupName, _ := gm["name"].(string)
+					for _, p := range groupProxies {
+						name, _ := p.(string)
+						if name == "" || validNames[name] {
+							cleaned = append(cleaned, p)
+						} else {
+							logger.Info("[Stash] 清理 proxy-group 中无效节点引用",
+								"group", groupName, "removed_node", name)
+						}
+					}
+					gm["proxies"] = cleaned
+				}
+				groupBytes, err := json.Marshal(gm)
 				if err != nil {
 					continue
 				}
