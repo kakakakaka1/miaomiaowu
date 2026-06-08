@@ -2008,6 +2008,38 @@ function SubscribeFilesPage() {
           }
         })
 
+        // 中转组：为有 relay_group_node_ids 的节点注入 dialer-proxy 和代理组
+        if (nodesQuery.data?.nodes) {
+          const relayGroups: Array<{ name: string; proxies: string[] }> = []
+          nodesQuery.data.nodes.forEach((node: any) => {
+            if (node.relay_group_name && node.relay_group_node_ids?.length > 0) {
+              const groupProxies = node.relay_group_node_ids
+                .map((id: number) => nodeIDToName.get(id))
+                .filter(Boolean) as string[]
+              if (groupProxies.length > 0) {
+                relayGroups.push({ name: node.relay_group_name, proxies: groupProxies })
+                const proxy = parsed.proxies.find((p: any) => p.name === node.node_name)
+                if (proxy && !proxy['dialer-proxy']) {
+                  proxy['dialer-proxy'] = node.relay_group_name
+                }
+              }
+            }
+          })
+          if (relayGroups.length > 0) {
+            if (!parsed['proxy-groups']) parsed['proxy-groups'] = []
+            relayGroups.forEach(rg => {
+              parsed['proxy-groups'].push({
+                name: rg.name,
+                type: 'url-test',
+                proxies: rg.proxies,
+                url: 'http://www.gstatic.com/generate_204',
+                interval: 300,
+                tolerance: 50,
+              })
+            })
+          }
+        }
+
         for (const group of proxyGroups) {
           if (!group.dialerProxyGroup) continue
           if (!proxyGroups.some(g => g.name === group.dialerProxyGroup)) continue

@@ -86,6 +86,8 @@ type ParsedNode = {
   original_server: string
   probe_server: string
   chain_proxy_node_id?: number | null
+  relay_group_name?: string
+  relay_group_node_ids?: number[]
   created_at: string
   updated_at: string
 }
@@ -456,6 +458,9 @@ function NodesPage() {
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [sourceNodeForExchange, setSourceNodeForExchange] = useState<ParsedNode | null>(null)
   const [exchangeFilterText, setExchangeFilterText] = useState<string>('')
+  const [relayGroupMode, setRelayGroupMode] = useState(false)
+  const [relayGroupName, setRelayGroupName] = useState('')
+  const [relayGroupSelectedIds, setRelayGroupSelectedIds] = useState<Set<number>>(new Set())
 
   // 自定义标签状态
   const [manualTag, setManualTag] = useState<string>('手动输入')
@@ -737,6 +742,11 @@ function NodesPage() {
   })
 
   const savedNodes = useMemo(() => nodesData?.nodes ?? [], [nodesData?.nodes])
+  const nodeIdToName = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const n of savedNodes) map.set(n.id, n.node_name)
+    return map
+  }, [savedNodes])
 
   // 节点数据加载后，清理已不存在的选中节点 ID
   useEffect(() => {
@@ -1940,6 +1950,31 @@ function NodesPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '创建链式代理节点失败')
+    },
+  })
+
+  // 创建中转组
+  const createRelayGroupMutation = useMutation({
+    mutationFn: async ({ sourceNode, groupName, nodeIds }: { sourceNode: ParsedNode; groupName: string; nodeIds: number[] }) => {
+      const response = await api.put(`/api/admin/nodes/${sourceNode.id}`, {
+        relay_group_name: groupName,
+        relay_group_node_ids: nodeIds,
+        chain_proxy_node_id: null,
+        enabled: sourceNode.enabled,
+      })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('中转组创建成功')
+      setExchangeDialogOpen(false)
+      setSourceNodeForExchange(null)
+      setRelayGroupMode(false)
+      setRelayGroupName('')
+      setRelayGroupSelectedIds(new Set())
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '创建中转组失败')
     },
   })
 
@@ -3571,7 +3606,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                   </Button>
                                 </div>
                               ) : (
-                                <div className='font-medium text-sm truncate'><Twemoji>{node.name || '未知'}</Twemoji></div>
+                                <>
+                                  {(() => {
+                                    const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
+                                    const relayName = node.dbNode?.relay_group_name
+                                    const label = relayName || chainName
+                                    if (!label) return null
+                                      const tip = relayName && node.dbNode?.relay_group_node_ids
+                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
+                                        : chainName ?? ''
+                                      return <div className='text-[10px] text-muted-foreground truncate leading-tight cursor-default' title={tip}>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</div>
+                                  })()}
+                                  <div className='font-medium text-sm truncate'><Twemoji>{node.name || '未知'}</Twemoji></div>
+                                </>
                               )}
                           </div>
 
@@ -3814,7 +3861,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                           </Button>
                                         </div>
                                       ) : (
-                                        <div className='font-medium text-sm truncate'><Twemoji>{node.name || '未知'}</Twemoji></div>
+                                        <>
+                                          {(() => {
+                                            const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
+                                            const relayName = node.dbNode?.relay_group_name
+                                            const label = relayName || chainName
+                                            if (!label) return null
+                                      const tip = relayName && node.dbNode?.relay_group_node_ids
+                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
+                                        : chainName ?? ''
+                                      return <div className='text-[10px] text-muted-foreground truncate leading-tight cursor-default' title={tip}>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</div>
+                                          })()}
+                                          <div className='font-medium text-sm truncate'><Twemoji>{node.name || '未知'}</Twemoji></div>
+                                        </>
                                       )}
                                     </div>
                                     {/* 编辑按钮 */}
@@ -4129,6 +4188,16 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                               ) : (
                                 <div className='flex items-center gap-2 min-w-0'>
                                   <div className='flex-1 min-w-0'>
+                                    {(() => {
+                                      const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
+                                      const relayName = node.dbNode?.relay_group_name
+                                      const label = relayName || chainName
+                                      if (!label) return null
+                                      const tip = relayName && node.dbNode?.relay_group_node_ids
+                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
+                                        : chainName ?? ''
+                                      return <div className='text-[10px] text-muted-foreground truncate leading-tight cursor-default' title={tip}>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</div>
+                                    })()}
                                     <div className='flex items-center gap-1'>
                                       <span className='truncate'><Twemoji>{node.name || '未知'}</Twemoji></span>
                                       {node.isSaved && (
@@ -4557,6 +4626,16 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                   </div>
                                   {/* 节点名称 + 服务器地址 */}
                                   <div className='flex-1 min-w-0 px-2' onClick={(e) => e.stopPropagation()}>
+                                    {(() => {
+                                      const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
+                                      const relayName = node.dbNode?.relay_group_name
+                                      const label = relayName || chainName
+                                      if (!label) return null
+                                      const tip = relayName && node.dbNode?.relay_group_node_ids
+                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
+                                        : chainName ?? ''
+                                      return <div className='text-[10px] text-muted-foreground truncate leading-tight cursor-default' title={tip}>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</div>
+                                    })()}
                                     <div className='flex items-center gap-2 min-w-0'>
                                       <span className='truncate flex-1 min-w-0 font-medium text-sm' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
                                       {node.isSaved && <Check className='size-4 text-green-600 shrink-0' />}
@@ -4811,46 +4890,58 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                   </Button>
                                 </div>
                               ) : (
-                                <div className='flex items-center gap-2 min-w-0'>
-                                  <span className='truncate flex-1 min-w-0' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
-                                  {node.isSaved && (
-                                    <Check className='size-4 text-green-600 shrink-0' />
-                                  )}
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                    onClick={() => handleNameEditStart(node)}
-                                    disabled={node.isSaved ? isUpdatingNodeName : false}
-                                  >
-                                    <Pencil className='size-4' />
-                                  </Button>
-                                  {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
+                                <div className='min-w-0'>
+                                  {(() => {
+                                    const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
+                                    const relayName = node.dbNode?.relay_group_name
+                                    const label = relayName || chainName
+                                    if (!label) return null
+                                      const tip = relayName && node.dbNode?.relay_group_node_ids
+                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
+                                        : chainName ?? ''
+                                      return <div className='text-[10px] text-muted-foreground truncate leading-tight cursor-default' title={tip}>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</div>
+                                  })()}
+                                  <div className='flex items-center gap-2 min-w-0'>
+                                    <span className='truncate flex-1 min-w-0' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
+                                    {node.isSaved && (
+                                      <Check className='size-4 text-green-600 shrink-0' />
+                                    )}
                                     <Button
                                       variant='ghost'
                                       size='icon'
-                                      className='size-7 text-muted-foreground hover:text-foreground shrink-0'
-                                      onClick={() => {
-                                        setSourceNodeForExchange(node.dbNode)
-                                        setExchangeDialogOpen(true)
-                                      }}
-                                    >
-                                      <img
-                                        src={ExchangeIcon}
-                                        alt='交换'
-                                        className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                      />
-                                    </Button>
-                                  )}
-                                  {node.isSaved && node.dbNode && (
-                                    <FlagEmojiPicker
-                                      onSelect={(flag) => handleSetNodeFlag(node.dbNode!.id, flag)}
-                                      onAutoDetect={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
-                                      disabled={addingEmojiForNode === node.dbNode!.id}
-                                      loading={addingEmojiForNode === node.dbNode!.id}
                                       className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                    />
-                                  )}
+                                      onClick={() => handleNameEditStart(node)}
+                                      disabled={node.isSaved ? isUpdatingNodeName : false}
+                                    >
+                                      <Pencil className='size-4' />
+                                    </Button>
+                                    {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
+                                      <Button
+                                        variant='ghost'
+                                        size='icon'
+                                        className='size-7 text-muted-foreground hover:text-foreground shrink-0'
+                                        onClick={() => {
+                                          setSourceNodeForExchange(node.dbNode)
+                                          setExchangeDialogOpen(true)
+                                        }}
+                                      >
+                                        <img
+                                          src={ExchangeIcon}
+                                          alt='交换'
+                                          className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                        />
+                                      </Button>
+                                    )}
+                                    {node.isSaved && node.dbNode && (
+                                      <FlagEmojiPicker
+                                        onSelect={(flag) => handleSetNodeFlag(node.dbNode!.id, flag)}
+                                        onAutoDetect={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
+                                        disabled={addingEmojiForNode === node.dbNode!.id}
+                                        loading={addingEmojiForNode === node.dbNode!.id}
+                                        className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
+                                      />
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </TableCell>
@@ -5358,6 +5449,16 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                   </div>
                                   {/* 节点名称 */}
                                   <div className='flex-1 min-w-0 px-2'>
+                                    {(() => {
+                                      const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
+                                      const relayName = node.dbNode?.relay_group_name
+                                      const label = relayName || chainName
+                                      if (!label) return null
+                                      const tip = relayName && node.dbNode?.relay_group_node_ids
+                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
+                                        : chainName ?? ''
+                                      return <div className='text-[10px] text-muted-foreground truncate leading-tight cursor-default' title={tip}>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</div>
+                                    })()}
                                     <div className='flex items-center gap-2 min-w-0'>
                                       <span className='truncate flex-1 min-w-0 font-medium text-sm' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
                                       {node.isSaved && <Check className='size-4 text-green-600 shrink-0' />}
@@ -5831,16 +5932,90 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       <Dialog open={exchangeDialogOpen} onOpenChange={(open) => {
         setExchangeDialogOpen(open)
         if (!open) {
-          setExchangeFilterText('') // 关闭对话框时清空筛选
+          setExchangeFilterText('')
+          setRelayGroupMode(false)
+          setRelayGroupName('')
+          setRelayGroupSelectedIds(new Set())
+        } else if (sourceNodeForExchange?.relay_group_name && sourceNodeForExchange?.relay_group_node_ids?.length) {
+          setRelayGroupMode(true)
+          setRelayGroupName(sourceNodeForExchange.relay_group_name)
+          setRelayGroupSelectedIds(new Set(sourceNodeForExchange.relay_group_node_ids))
         }
       }}>
         <DialogContent className='max-w-2xl flex flex-col max-h-[80vh]'>
           <DialogHeader>
-            <DialogTitle>选择中转节点</DialogTitle>
+            <DialogTitle>
+              <Twemoji>{sourceNodeForExchange?.node_name ?? ''}</Twemoji>
+            </DialogTitle>
             <DialogDescription>
-              选择目标节点与 "{sourceNodeForExchange?.node_name}" 创建链式代理
+              {relayGroupMode ? '多选节点组成中转代理组' : '选择目标节点创建链式代理'}
             </DialogDescription>
           </DialogHeader>
+          <div className='flex border-b shrink-0'>
+            <button
+              className={`flex-1 py-1.5 text-sm font-medium text-center transition-colors ${!relayGroupMode ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => {
+                if (relayGroupMode) {
+                  setRelayGroupMode(false)
+                  setRelayGroupSelectedIds(new Set())
+                }
+              }}
+            >
+              链式代理
+            </button>
+            <button
+              className={`flex-1 py-1.5 text-sm font-medium text-center transition-colors ${relayGroupMode ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => {
+                if (!relayGroupMode) {
+                  setRelayGroupMode(true)
+                  if (!relayGroupName) {
+                    setRelayGroupName(`${sourceNodeForExchange?.node_name ?? ''}中转`)
+                  }
+                }
+              }}
+            >
+              中转组
+            </button>
+          </div>
+          {relayGroupMode && (
+            <div className='shrink-0 space-y-2'>
+              {(() => {
+                const existingGroups = new Map<string, number[]>()
+                for (const n of savedNodes) {
+                  if (n.relay_group_name && n.relay_group_node_ids?.length && n.id !== sourceNodeForExchange?.id) {
+                    if (!existingGroups.has(n.relay_group_name)) {
+                      existingGroups.set(n.relay_group_name, n.relay_group_node_ids)
+                    }
+                  }
+                }
+                return existingGroups.size > 0 ? (
+                  <div className='flex flex-wrap gap-1'>
+                    <span className='text-xs text-muted-foreground leading-6'>已有中转组:</span>
+                    {Array.from(existingGroups.entries()).map(([name, ids]) => (
+                      <Button
+                        key={name}
+                        variant={relayGroupName === name ? 'default' : 'outline'}
+                        size='sm'
+                        className='h-6 text-xs px-2'
+                        onClick={() => {
+                          setRelayGroupName(name)
+                          setRelayGroupSelectedIds(new Set(ids))
+                        }}
+                      >
+                        {name} ({ids.length})
+                      </Button>
+                    ))}
+                  </div>
+                ) : null
+              })()}
+              <Input
+                placeholder='中转组名称'
+                value={relayGroupName}
+                onChange={(e) => setRelayGroupName(e.target.value)}
+                className='text-sm'
+              />
+            </div>
+          )}
           <div className='space-y-2 shrink-0'>
             <Input
               placeholder='搜索节点名称、协议或标签...'
@@ -5854,10 +6029,9 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
           </div>
           <div className='overflow-y-auto min-h-0 py-2'>
             {(() => {
-              // 筛选逻辑
               const filteredNodes = savedNodes
-                .filter(node => node.id !== sourceNodeForExchange?.id) // 排除源节点自己
-                .filter(node => !node.protocol.includes('⇋')) // 排除链式代理节点（协议包含⇋）
+                .filter(node => node.id !== sourceNodeForExchange?.id)
+                .filter(node => !node.protocol.includes('⇋'))
                 .filter(node => {
                   if (!exchangeFilterText.trim()) return true
                   const searchText = exchangeFilterText.toLowerCase()
@@ -5873,20 +6047,35 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   {filteredNodes.map((node) => (
                     <Button
                       key={node.id}
-                      variant='outline'
+                      variant={relayGroupMode && relayGroupSelectedIds.has(node.id) ? 'default' : 'outline'}
                       className='w-full justify-start text-left h-auto py-3'
                       onClick={() => {
-                        if (sourceNodeForExchange) {
+                        if (relayGroupMode) {
+                          setRelayGroupSelectedIds(prev => {
+                            const next = new Set(prev)
+                            if (next.has(node.id)) {
+                              next.delete(node.id)
+                            } else {
+                              next.add(node.id)
+                            }
+                            return next
+                          })
+                        } else if (sourceNodeForExchange) {
                           createRelayNodeMutation.mutate({
                             sourceNode: sourceNodeForExchange,
                             targetNode: node
                           })
                         }
                       }}
-                      disabled={createRelayNodeMutation.isPending}
+                      disabled={!relayGroupMode && createRelayNodeMutation.isPending}
                     >
                       <div className='flex flex-col gap-2 w-full items-start'>
                         <div className='flex items-center gap-2 w-full flex-wrap'>
+                          {relayGroupMode && (
+                            <span className={`size-4 border rounded-sm flex items-center justify-center shrink-0 ${relayGroupSelectedIds.has(node.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'}`}>
+                              {relayGroupSelectedIds.has(node.id) && '✓'}
+                            </span>
+                          )}
                           <span className='font-medium'><Twemoji>{node.node_name}</Twemoji></span>
                           <span className='text-xs text-muted-foreground'>
                             {node.protocol} - {node.original_server}
@@ -5908,6 +6097,25 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               )
             })()}
           </div>
+          {relayGroupMode && (
+            <div className='shrink-0 pt-2 border-t'>
+              <Button
+                className='w-full'
+                disabled={relayGroupSelectedIds.size === 0 || !relayGroupName.trim() || createRelayGroupMutation.isPending}
+                onClick={() => {
+                  if (sourceNodeForExchange) {
+                    createRelayGroupMutation.mutate({
+                      sourceNode: sourceNodeForExchange,
+                      groupName: relayGroupName.trim(),
+                      nodeIds: Array.from(relayGroupSelectedIds),
+                    })
+                  }
+                }}
+              >
+                {createRelayGroupMutation.isPending ? '创建中...' : `确认创建中转组 (${relayGroupSelectedIds.size})`}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

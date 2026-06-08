@@ -842,6 +842,11 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				// 给落地节点组内的节点自动添加 dialer-proxy: 🌠 中转节点
 				injectLegacyDialerProxy(rootMap)
 
+				// 中转组：从数据库获取节点的中转组配置，注入 dialer-proxy 和代理组
+				if username != "" && h.repo != nil {
+					injectRelayGroups(r.Context(), h.repo, username, rootMap)
+				}
+
 				// 查找 rule-providers 的位置
 				ruleProvidersIdx := -1
 				for i := 0; i < len(rootMap.Content); i += 2 {
@@ -2009,6 +2014,111 @@ func injectLegacyDialerProxy(rootMap *yaml.Node) {
 	}
 }
 
+func injectRelayGroups(ctx context.Context, repo *storage.TrafficRepository, username string, rootMap *yaml.Node) {
+	nodes, err := repo.ListNodes(ctx, username)
+	if err != nil {
+		return
+	}
+
+	nodeIDToName := make(map[int64]string, len(nodes))
+	for _, n := range nodes {
+		nodeIDToName[n.ID] = n.NodeName
+	}
+
+	type relayInfo struct {
+		sourceName string
+		groupName  string
+		proxies    []string
+	}
+	var relays []relayInfo
+	for _, n := range nodes {
+		if len(n.RelayGroupNodeIDs) == 0 || n.RelayGroupName == "" {
+			continue
+		}
+		var proxies []string
+		for _, rid := range n.RelayGroupNodeIDs {
+			if name, ok := nodeIDToName[rid]; ok {
+				proxies = append(proxies, name)
+			}
+		}
+		if len(proxies) > 0 {
+			relays = append(relays, relayInfo{sourceName: n.NodeName, groupName: n.RelayGroupName, proxies: proxies})
+		}
+	}
+	if len(relays) == 0 {
+		return
+	}
+
+	// 给源节点注入 dialer-proxy
+	for i := 0; i < len(rootMap.Content); i += 2 {
+		if rootMap.Content[i].Value != "proxies" {
+			continue
+		}
+		proxiesNode := rootMap.Content[i+1]
+		if proxiesNode.Kind != yaml.SequenceNode {
+			break
+		}
+		relayBySource := make(map[string]string, len(relays))
+		for _, r := range relays {
+			relayBySource[r.sourceName] = r.groupName
+		}
+		for _, proxyNode := range proxiesNode.Content {
+			if proxyNode.Kind != yaml.MappingNode {
+				continue
+			}
+			name := yamlMapGet(proxyNode, "name")
+			groupName, ok := relayBySource[name]
+			if !ok {
+				continue
+			}
+			if yamlMapGet(proxyNode, "dialer-proxy") != "" {
+				continue
+			}
+			proxyNode.Content = append(proxyNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "dialer-proxy"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: groupName},
+			)
+		}
+		break
+	}
+
+	// 追加中转代理组到 proxy-groups
+	for i := 0; i < len(rootMap.Content); i += 2 {
+		if rootMap.Content[i].Value != "proxy-groups" {
+			continue
+		}
+		groupsNode := rootMap.Content[i+1]
+		if groupsNode.Kind != yaml.SequenceNode {
+			break
+		}
+		for _, r := range relays {
+			groupNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			groupNode.Content = append(groupNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "name"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: r.groupName},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "type"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "url-test"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "url"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "http://www.gstatic.com/generate_204"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "interval"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "300", Tag: "!!int"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "tolerance"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "50", Tag: "!!int"},
+			)
+			proxiesSeq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+			for _, p := range r.proxies {
+				proxiesSeq.Content = append(proxiesSeq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: p})
+			}
+			groupNode.Content = append(groupNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "proxies"},
+				proxiesSeq,
+			)
+			groupsNode.Content = append(groupsNode.Content, groupNode)
+		}
+		break
+	}
+}
+
 // yamlMapGet 从 MappingNode 中读取指定 key 的字符串值
 func yamlMapGet(node *yaml.Node, key string) string {
 	for i := 0; i < len(node.Content)-1; i += 2 {
@@ -2244,9 +2354,41 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 				proxyConfig["dialer-proxy"] = targetName
 			}
 		}
+		// 中转组：注入 dialer-proxy 指向中转代理组
+		if len(node.RelayGroupNodeIDs) > 0 && node.RelayGroupName != "" {
+			proxyConfig["dialer-proxy"] = node.RelayGroupName
+		}
 		proxies = append(proxies, proxyConfig)
 	}
-	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies), "tag_filter", hasTagFilter)
+
+	// 中转组：为每个有中转组的节点生成代理组配置
+	var relayGroups []map[string]any
+	for _, node := range nodes {
+		if !node.Enabled || len(node.RelayGroupNodeIDs) == 0 || node.RelayGroupName == "" {
+			continue
+		}
+		if hasTagFilter && !node.HasAnyTag(selectedTagsMap) {
+			continue
+		}
+		var groupProxies []string
+		for _, rid := range node.RelayGroupNodeIDs {
+			if name, ok := nodeIDToName[rid]; ok {
+				groupProxies = append(groupProxies, name)
+			}
+		}
+		if len(groupProxies) > 0 {
+			relayGroups = append(relayGroups, map[string]any{
+				"name":      node.RelayGroupName,
+				"type":      "url-test",
+				"proxies":   groupProxies,
+				"url":       "http://www.gstatic.com/generate_204",
+				"interval":  300,
+				"tolerance": 50,
+			})
+		}
+	}
+
+	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies), "tag_filter", hasTagFilter, "relay_groups", len(relayGroups))
 
 	// 3. 从代理集合表获取代理集合配置（用于 proxy-providers）
 	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, nodeOwner)
@@ -2286,6 +2428,14 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 	result, err = injectProxiesIntoTemplate(result, proxies)
 	if err != nil {
 		return nil, fmt.Errorf("注入代理节点失败: %w", err)
+	}
+
+	// 6. 注入中转代理组到 proxy-groups
+	if len(relayGroups) > 0 {
+		result, err = injectRelayGroupsIntoTemplate(result, relayGroups)
+		if err != nil {
+			logger.Info("[模板生成] 注入中转代理组失败", "error", err)
+		}
 	}
 
 	logger.Info("[模板生成] 模板处理完成", "subscribe", subscribeFile.Name, "template", subscribeFile.TemplateFilename, "result_bytes", len(result))

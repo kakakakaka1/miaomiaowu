@@ -217,9 +217,11 @@ type Node struct {
 	Tags             []string // 多标签支持
 	OriginalServer   string
 	ProbeServer      string // Probe server name for binding
-	ChainProxyNodeID *int64 // 链式代理目标节点 ID
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ChainProxyNodeID  *int64  // 链式代理目标节点 ID
+	RelayGroupName    string   // 中转组名称
+	RelayGroupNodeIDs []int64  // 中转组节点 ID 列表
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // SubscribeFile represents a subscription file configuration.
@@ -703,6 +705,13 @@ CREATE INDEX IF NOT EXISTS idx_nodes_enabled ON nodes(enabled);
 
 	// Migrate legacy chain proxy nodes: extract dialer-proxy from clash_config into chain_proxy_node_id
 	r.migrateChainProxyNodes()
+
+	if err := r.ensureNodeColumn("relay_group_name", "TEXT"); err != nil {
+		return err
+	}
+	if err := r.ensureNodeColumn("relay_group_node_ids", "TEXT"); err != nil {
+		return err
+	}
 
 	// Create tag index after ensuring column exists
 	if _, err := r.db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_tag ON nodes(tag);`); err != nil {
