@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-const CURRENT_VERSION = '0.7.8'
+const CURRENT_VERSION = '0.7.9'
 const GITHUB_API_URL = 'https://api.github.com/repos/iluobei/miaomiaowu/releases/latest'
 
 interface GitHubRelease {
