@@ -540,28 +540,28 @@ applications:
 			content: `Custom_Direct_Classical:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Direct_Classical.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Direct_Classical.yaml
   path: ./providers/15519759398106057482.yaml
   interval: 28800
 
 Custom_Proxy_Classical:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Classical.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Classical.yaml
   path: ./providers/5958306251279867197.yaml
   interval: 28800
 
 Steam_CDN_Classical:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Steam_CDN_Classical.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Steam_CDN_Classical.yaml
   path: ./providers/13268481674871578153.yaml
   interval: 28800
 
 Custom_Port_Direct:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Port_Direct.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Port_Direct.yaml
   path: ./providers/2451647452112462632.yaml
   interval: 28800`
 		},
@@ -570,28 +570,28 @@ Custom_Port_Direct:
 			content: `Custom_Direct_Classical:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Direct_Classical.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Direct_Classical.yaml
   path: ./providers/15519759398106057482.yaml
   interval: 28800
 
 Custom_Proxy_Classical:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Classical.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Classical.yaml
   path: ./providers/5958306251279867197.yaml
   interval: 28800
 
 Steam_CDN_Classical:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Steam_CDN_Classical.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Steam_CDN_Classical.yaml
   path: ./providers/13268481674871578153.yaml
   interval: 28800
 
 Custom_Port_Direct:
   type: http
   behavior: classical
-  url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Port_Direct.yaml
+  url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Port_Direct.yaml
   path: ./providers/2451647452112462632.yaml
   interval: 28800`
 		},

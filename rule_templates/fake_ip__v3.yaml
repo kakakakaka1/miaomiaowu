@@ -205,36 +205,36 @@ rule-providers:
   Custom_Direct_Domain:
     type: http
     behavior: domain
-    url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Direct_Domain.yaml
+    url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Direct_Domain.yaml
     path: ./providers/Custom_Direct_Domain.yaml
     interval: 28800
   Custom_Direct_Classical_IP:
     type: http
     behavior: classical
-    url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Direct_Classical_IP.yaml
+    url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Direct_Classical_IP.yaml
     path: ./providers/Custom_Direct_Classical_IP.yaml
     interval: 28800
   Custom_Proxy_Domain:
     type: http
     behavior: domain
-    url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.yaml
+    url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Domain.yaml
     path: ./providers/Custom_Proxy_Domain.yaml
     interval: 28800
   Custom_Proxy_Classical_IP:
     type: http
     behavior: classical
-    url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Classical_IP.yaml
+    url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Proxy_Classical_IP.yaml
     path: ./providers/Custom_Proxy_Classical_IP.yaml
     interval: 28800
   Steam_CDN_Classical:
     type: http
     behavior: classical
-    url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Steam_CDN_Classical.yaml
+    url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Steam_CDN_Classical.yaml
     path: ./providers/Steam_CDN_Classical.yaml
     interval: 2880
   Custom_Port_Direct:
     type: http
     behavior: classical
-    url: https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/rule/Custom_Port_Direct.yaml
+    url: https://testingcf.jsdelivr.net/gh/iluobei/Custom_OpenClash_Rules@main/rule/Custom_Port_Direct.yaml
     path: ./providers/Custom_Port_Direct.yaml
     interval: 28800

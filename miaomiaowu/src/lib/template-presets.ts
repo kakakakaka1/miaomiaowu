@@ -55,10 +55,10 @@ export const ACL4SSR_PRESETS: ACL4SSRPreset[] = [
 
 // Aethersailor 预设列表
 export const Aethersailor_PRESETS: ACL4SSRPreset[] = [
-  { name: 'Custom_Clash', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash.ini', label: 'Aethersailor - 标准 (推荐使用)' },
-  { name: 'Custom_Clash_Full', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Full.ini', label: 'Aethersailor - 全分组 (节点较多)' },
-  { name: 'Custom_Clash_GFW', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_GFW.ini', label: 'Aethersailor - 极简 (GFW)' },
-  { name: 'Custom_Clash_Lite', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Lite.ini', label: 'Aethersailor - 轻量 (国内直连，国外代理)' },
+  { name: 'Custom_Clash', url: 'https://raw.githubusercontent.com/iluobei/Custom_OpenClash_Rules/refs/heads/main/cfg/Custom_Clash.ini', label: 'Aethersailor - 标准 (推荐使用)' },
+  { name: 'Custom_Clash_Full', url: 'https://raw.githubusercontent.com/iluobei/Custom_OpenClash_Rules/refs/heads/main/cfg/Custom_Clash_Full.ini', label: 'Aethersailor - 全分组 (节点较多)' },
+  { name: 'Custom_Clash_GFW', url: 'https://raw.githubusercontent.com/iluobei/Custom_OpenClash_Rules/refs/heads/main/cfg/Custom_Clash_GFW.ini', label: 'Aethersailor - 极简 (GFW)' },
+  { name: 'Custom_Clash_Lite', url: 'https://raw.githubusercontent.com/iluobei/Custom_OpenClash_Rules/refs/heads/main/cfg/Custom_Clash_Lite.ini', label: 'Aethersailor - 轻量 (国内直连，国外代理)' },
 ]
 
 // 合并所有预设模板
