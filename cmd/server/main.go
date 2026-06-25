@@ -266,13 +266,18 @@ func main() {
 
 		isTempSub := strings.HasPrefix(path, "t/") && len(path) == 10
 
-		// 暴力探测封禁检查（临时订阅排除，不受封禁拦截）
-		if !isTempSub && bruteForceProtector.IsBlocked(clientIP, r.URL.Path) {
+		// 短链探测候选：单段字母数字路径，且不是已知前端 SPA 路由。
+		// 仅这类路径才参与暴力探测计数/封禁；SPA 路由(/nodes 等)、静态资源、
+		// 临时订阅一律放行，避免正常浏览被误判为订阅探测而把整个 IP 误封。
+		isShortLinkProbe := !isTempSub && len(path) >= 2 && isAlphanumeric(path) && !reservedFrontendRoutes[path]
+
+		// 暴力探测封禁检查（仅拦截短链探测类路径，避免误锁正常用户的 UI 访问）
+		if isShortLinkProbe && bruteForceProtector.IsBlocked(clientIP, r.URL.Path) {
 			http.NotFound(w, r)
 			return
 		}
 
-		isSubscriptionFetch := isTempSub || (len(path) >= 2 && isAlphanumeric(path))
+		isSubscriptionFetch := isTempSub || isShortLinkProbe
 		if isSubscriptionFetch && !subRateLimiter.Allow(clientIP) {
 			http.Error(w, "请求过于频繁，请稍后再试", http.StatusTooManyRequests)
 			return
@@ -289,7 +294,7 @@ func main() {
 		}
 		// 自定义短链接后, 订阅+用户最小为2个字符
 		// TryServe does DB lookup; returns false if no match, allowing fallthrough to web
-		if len(path) >= 2 && isAlphanumeric(path) {
+		if isShortLinkProbe {
 			if shortLinkHandler.TryServe(w, r) {
 				return
 			}
@@ -335,6 +340,24 @@ func getAddr() string {
 		port = "8080"
 	}
 	return ":" + port
+}
+
+// reservedFrontendRoutes 是前端 SPA 的顶层路由名（单段、纯字母数字的那些，需与
+// miaomiaowu/src/routes 保持一致）。这些是合法的前端路由，访问时不能被当作订阅短链探测，
+// 否则正常浏览(如 /nodes、/login)会被记为暴力探测失败、最终把整个 IP 误封导致无法访问。
+// 含连字符的路由(custom-rules / subscribe-files / system-settings / templates-v3 /
+// change-password)本身不是纯字母数字，不会命中探测逻辑，这里无需列出。
+var reservedFrontendRoutes = map[string]bool{
+	"nodes":        true,
+	"login":        true,
+	"rules":        true,
+	"generator":    true,
+	"probe":        true,
+	"settings":     true,
+	"templates":    true,
+	"users":        true,
+	"subscription": true,
+	"404":          true,
 }
 
 // isAlphanumeric checks if a string contains only alphanumeric characters
